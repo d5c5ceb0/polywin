@@ -1,5 +1,5 @@
 [project]
-name = "polyclaw"
+name = "polywin"
 version = "0.1.0"
 description = "Trading-enabled Polymarket skill for OpenClaw"
 readme = "README.md"

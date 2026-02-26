@@ -1,1 +1,1 @@
-"""PolyClaw library modules."""
+"""PolyWin library modules."""

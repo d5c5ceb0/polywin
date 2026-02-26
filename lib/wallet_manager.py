@@ -18,7 +18,7 @@ class WalletBalances:
 
 
 class WalletManager:
-    """Manages wallet from POLYCLAW_PRIVATE_KEY env var."""
+    """Manages wallet from POLYWIN_PRIVATE_KEY env var."""
 
     # Default public RPC endpoint for Polygon
     DEFAULT_RPC_URL = "https://polygon.drpc.org"
@@ -30,8 +30,8 @@ class WalletManager:
         self._load_from_env()
 
     def _load_from_env(self) -> None:
-        """Load private key from POLYCLAW_PRIVATE_KEY env var."""
-        private_key = os.environ.get("POLYCLAW_PRIVATE_KEY")
+        """Load private key from POLYWIN_PRIVATE_KEY env var."""
+        private_key = os.environ.get("POLYWIN_PRIVATE_KEY")
         if private_key:
             if not private_key.startswith("0x"):
                 private_key = "0x" + private_key
@@ -56,7 +56,7 @@ class WalletManager:
     def get_unlocked_key(self) -> str:
         """Get the private key for signing."""
         if not self._private_key:
-            raise ValueError("No wallet configured. Set POLYCLAW_PRIVATE_KEY env var.")
+            raise ValueError("No wallet configured. Set POLYWIN_PRIVATE_KEY env var.")
         return self._private_key
 
     def lock(self) -> None:

@@ -204,3 +204,50 @@ class ClobClientWrapper:
             return True
         except Exception:
             return False
+
+    def get_positions(self) -> list[dict]:
+        """Get all positions from CLOB API (real-time chain data)."""
+        try:
+            # Ensure client is initialized
+            _ = self.client
+            
+            # Use the client's internal method to create auth headers
+            # and make direct API call since py-clob-client doesn't expose get_positions
+            creds = self._creds
+            if not creds:
+                return []
+            
+            headers = {
+                "POLY_ADDRESS": self.address,
+                "POLY_SIGNATURE": creds.api_secret,
+                "POLY_TIMESTAMP": str(int(time.time())),
+                "POLY_API_KEY": creds.api_key,
+                "POLY_PASSPHRASE": creds.api_passphrase,
+            }
+            
+            response = httpx.get(
+                "https://clob.polymarket.com/positions",
+                headers=headers,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            # Fallback: try using data API which doesn't require auth
+            try:
+                response = httpx.get(
+                    f"https://data-api.polymarket.com/positions?user={self.address}",
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception:
+                return []
+
+    def get_balances(self) -> dict:
+        """Get token balances from CLOB API."""
+        try:
+            _ = self.client  # Ensure client is initialized
+            return self._client.get_balance_allowance()
+        except Exception:
+            return {}

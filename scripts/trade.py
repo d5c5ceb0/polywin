@@ -4,11 +4,9 @@
 import sys
 import json
 import time
-import uuid
 import asyncio
 import argparse
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
 from typing import Optional
 from pathlib import Path
 
@@ -25,7 +23,6 @@ from lib.wallet_manager import WalletManager
 from lib.gamma_client import GammaClient, Market
 from lib.clob_client import ClobClientWrapper
 from lib.contracts import CONTRACTS, CTF_ABI, POLYGON_CHAIN_ID
-from lib.position_storage import PositionStorage, PositionEntry
 
 
 @dataclass
@@ -392,7 +389,7 @@ async def cmd_buy(args):
 
     if not wallet.is_unlocked:
         print("Error: No wallet configured")
-        print("Set POLYCLAW_PRIVATE_KEY environment variable.")
+        print("Set POLYWIN_PRIVATE_KEY environment variable.")
         return 1
 
     try:
@@ -423,23 +420,7 @@ async def cmd_buy(args):
                 unwanted = "NO" if result.position == "YES" else "YES"
                 print(f"  Note: You have {result.amount:.0f} {unwanted} tokens to sell manually")
 
-            # Record position
-            storage = PositionStorage()
-            position_entry = PositionEntry(
-                position_id=str(uuid.uuid4()),
-                market_id=result.market_id,
-                question=result.question,
-                position=result.position,
-                token_id=result.wanted_token_id,
-                entry_time=datetime.now(timezone.utc).isoformat(),
-                entry_amount=result.amount,
-                entry_price=result.entry_price,
-                split_tx=result.split_tx,
-                clob_order_id=result.clob_order_id,
-                clob_filled=result.clob_filled,
-            )
-            storage.add(position_entry)
-            print(f"  Position ID: {position_entry.position_id[:12]}...")
+            print(f"  View positions: polywin positions")
         else:
             print(f"Trade failed: {result.error}")
             return 1
@@ -461,7 +442,7 @@ async def cmd_sell(args):
 
     if not wallet.is_unlocked:
         print("Error: No wallet configured")
-        print("Set POLYCLAW_PRIVATE_KEY environment variable.")
+        print("Set POLYWIN_PRIVATE_KEY environment variable.")
         return 1
 
     try:
@@ -481,14 +462,6 @@ async def cmd_sell(args):
             print(f"  Price: ~${result.price:.2f}")
             print(f"  CLOB Order: {result.clob_order_id}")
 
-            # Update position status if we have a matching position
-            storage = PositionStorage()
-            positions = storage.get_by_market(result.market_id)
-            for pos in positions:
-                if pos["position"] == result.position and pos["status"] == "open":
-                    storage.update_status(pos["position_id"], "closed")
-                    print(f"  Position {pos['position_id'][:12]}... marked as closed")
-                    break
         else:
             print(f"Sell failed: {result.error}")
             return 1

@@ -1,4 +1,4 @@
-# PolyClaw
+# PolyWin
 
 **Trading-enabled Polymarket skill for OpenClaw.**
 
@@ -11,28 +11,26 @@ Browse prediction markets, execute trades on-chain, and discover hedging opportu
 ## Features
 
 ### Market browsing
-- `polyclaw markets trending` — Top markets by 24h volume
-- `polyclaw markets search "query"` — Search markets by keyword
-- `polyclaw market <id>` — Market details with prices
+- `polywin markets trending` — Top markets by 24h volume
+- `polywin markets search "query"` — Search markets by keyword
+- `polywin market <id>` — Market details with prices
 
 ### Trading
-- `polyclaw buy <market_id> YES <amount>` — Buy YES position
-- `polyclaw buy <market_id> NO <amount>` — Buy NO position
+- `polywin buy <market_id> YES <amount>` — Buy YES position
+- `polywin buy <market_id> NO <amount>` — Buy NO position
 - Split + CLOB execution (split USDC → YES+NO, sell unwanted side)
 
 ### Position tracking
-- `polyclaw positions` — List open positions with live P&L
-- `polyclaw position <id>` — Detailed position view
-- Positions tracked locally in `~/.openclaw/polyclaw/positions.json`
+- `polywin positions` — List open positions with live P&L
 
 ### Wallet management
-- `polyclaw wallet status` — Show address, POL/USDC.e balances
-- `polyclaw wallet approve` — Set Polymarket contract approvals (one-time)
+- `polywin wallet status` — Show address, POL/USDC.e balances
+- `polywin wallet approve` — Set Polymarket contract approvals (one-time)
 
 ### Hedge discovery
-- `polyclaw hedge scan` — Scan trending markets for hedging opportunities
-- `polyclaw hedge scan --query "topic"` — Scan markets matching a query
-- `polyclaw hedge analyze <id1> <id2>` — Analyze specific market pair
+- `polywin hedge scan` — Scan trending markets for hedging opportunities
+- `polywin hedge scan --query "topic"` — Scan markets matching a query
+- `polywin hedge analyze <id1> <id2>` — Analyze specific market pair
 
 Uses LLM-powered contrapositive logic to find covering portfolios. Only logically necessary implications are accepted — correlations and "likely" relationships are rejected.
 
@@ -45,29 +43,29 @@ Uses LLM-powered contrapositive logic to find covering portfolios. Only logicall
 **Option A: Install from ClawHub (recommended)**
 
 ```bash
-clawhub install polyclaw
-cd ~/.openclaw/skills/polyclaw
+clawhub install polywin
+cd ~/.openclaw/skills/polywin
 uv sync
 ```
 
 **Option B: Manual install**
 
 ```bash
-cp -r polyclaw ~/.openclaw/skills/
-cd ~/.openclaw/skills/polyclaw
+cp -r polywin ~/.openclaw/skills/
+cd ~/.openclaw/skills/polywin
 uv sync
 ```
 
 ### 2. Configure environment variables
 
-Add the following to your `openclaw.json` under `skills.entries.polyclaw.env`:
+Add the following to your `openclaw.json` under `skills.entries.polywin.env`:
 
 ```json
-"polyclaw": {
+"polywin": {
   "enabled": true,
   "env": {
     "CHAINSTACK_NODE": "https://polygon-mainnet.core.chainstack.com/YOUR_KEY",
-    "POLYCLAW_PRIVATE_KEY": "0x...",
+    "POLYWIN_PRIVATE_KEY": "0x...",
     "OPENROUTER_API_KEY": "sk-or-v1-..."
   }
 }
@@ -86,7 +84,7 @@ Add the following to your `openclaw.json` under `skills.entries.polyclaw.env`:
 Before your first trade, set Polymarket contract approvals (one-time, costs ~0.01 POL in gas):
 
 ```bash
-uv run python scripts/polyclaw.py wallet approve
+uv run python scripts/polywin.py wallet approve
 ```
 
 This submits 6 approval transactions to Polygon. You only need to do this once per wallet.
@@ -95,15 +93,15 @@ This submits 6 approval transactions to Polygon. You only need to do this once p
 
 ```bash
 # Browse markets
-uv run python scripts/polyclaw.py markets trending
-uv run python scripts/polyclaw.py markets search "election"
+uv run python scripts/polywin.py markets trending
+uv run python scripts/polywin.py markets search "election"
 
 # Find hedging opportunities
-uv run python scripts/polyclaw.py hedge scan --limit 10
+uv run python scripts/polywin.py hedge scan --limit 10
 
 # Check wallet and trade
-uv run python scripts/polyclaw.py wallet status
-uv run python scripts/polyclaw.py buy <market_id> YES 50
+uv run python scripts/polywin.py wallet status
+uv run python scripts/polywin.py buy <market_id> YES 50
 ```
 
 ## Example prompts
@@ -126,7 +124,7 @@ Returns full market info with link to Polymarket.
 
 ### 3. Check wallet status
 ```
-What's my PolyClaw wallet balance?
+What's my PolyWin wallet balance?
 ```
 Shows address, POL balance (for gas), and USDC.e balance.
 
@@ -152,7 +150,7 @@ Review the results — you'll see coverage tiers (T1 = 95%+, T2 = 90-95%, T3 = 8
 
 ### 6. Check positions
 ```
-Show my PolyClaw positions
+Show my PolyWin positions
 ```
 Lists open positions with entry price, current price, and P&L.
 
@@ -170,7 +168,7 @@ Sells your tokens on the CLOB order book at current market price.
 3. Review hedge opportunities with coverage tiers
 4. **"Buy $25 YES on market abc123"** → Take position on target market
 5. **"Buy $25 NO on market xyz789"** → Take position on covering market
-6. **"Show my PolyClaw positions"** → Verify entries and track P&L
+6. **"Show my PolyWin positions"** → Verify entries and track P&L
 
 ## Environment variables
 
@@ -178,20 +176,20 @@ Sells your tokens on the CLOB order book at current market price.
 |----------|----------|-------------|
 | `CHAINSTACK_NODE` | Yes (trading) | Polygon RPC URL |
 | `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM |
-| `POLYCLAW_PRIVATE_KEY` | Yes (trading) | EVM private key (hex) |
+| `POLYWIN_PRIVATE_KEY` | Yes (trading) | EVM private key (hex) |
 | `HTTPS_PROXY` | No | Only needed if CLOB orders fail (see [troubleshooting](#clob-order-failed--ip-blocked-by-cloudflare)) |
 | `CLOB_MAX_RETRIES` | No | Max retries for CLOB orders (default: 5) |
 
 ## Directory structure
 
 ```
-polyclaw/
+polywin/
 ├── SKILL.md                     # OpenClaw skill manifest
 ├── README.md                    # This file
 ├── pyproject.toml               # Python dependencies (uv)
 │
 ├── scripts/
-│   ├── polyclaw.py              # CLI dispatcher
+│   ├── polywin.py               # CLI dispatcher
 │   ├── markets.py               # Market browsing (Gamma API)
 │   ├── wallet.py                # Wallet management
 │   ├── trade.py                 # Split + CLOB execution
@@ -205,18 +203,17 @@ polyclaw/
     ├── coverage.py              # Coverage calculation + tiers
     ├── gamma_client.py          # Polymarket Gamma API client
     ├── llm_client.py            # OpenRouter LLM client
-    ├── position_storage.py      # Position JSON storage
     └── wallet_manager.py        # Wallet lifecycle
 ```
 
 ## Trading flow
 
-1. **Set approvals** (one-time): `polyclaw wallet approve`
-2. **Execute trade**: `polyclaw buy <market_id> YES 50`
+1. **Set approvals** (one-time): `polywin wallet approve`
+2. **Execute trade**: `polywin buy <market_id> YES 50`
    - Split $50 USDC.e → 50 YES + 50 NO tokens
    - Sell 50 NO tokens via CLOB → recover ~$15 (at 30¢)
    - Result: 50 YES tokens, net cost ~$35
-3. **Track position**: `polyclaw positions`
+3. **Track position**: `polywin positions`
 
 ### Understanding the split mechanism
 
@@ -264,9 +261,9 @@ order = client.get_order("0xc93d6214...")
 
 ## Hedge discovery flow
 
-1. **Scan markets**: `polyclaw hedge scan --query "election"`
+1. **Scan markets**: `polywin hedge scan --query "election"`
 2. **Review output**: Table shows Tier, Coverage, Cost, Target, Cover
-3. **Analyze pair**: `polyclaw hedge analyze <id1> <id2>`
+3. **Analyze pair**: `polywin hedge analyze <id1> <id2>`
 4. **Execute if profitable**: Buy both positions manually
 
 **Coverage tiers:**
@@ -288,9 +285,9 @@ order = client.get_order("0xc93d6214...")
 ## Troubleshooting
 
 ### "No wallet available"
-Set the `POLYCLAW_PRIVATE_KEY` environment variable:
+Set the `POLYWIN_PRIVATE_KEY` environment variable:
 ```bash
-export POLYCLAW_PRIVATE_KEY="0x..."
+export POLYWIN_PRIVATE_KEY="0x..."
 ```
 
 ### "CHAINSTACK_NODE not set"
@@ -314,7 +311,7 @@ Model quality matters. The default `nvidia/nemotron-nano-9b-v2:free` works well.
 ### "Insufficient USDC.e"
 Check balance — you need USDC.e (bridged USDC) on Polygon:
 ```bash
-uv run python scripts/polyclaw.py wallet status
+uv run python scripts/polywin.py wallet status
 ```
 
 ### "CLOB order failed" / "IP blocked by Cloudflare"
@@ -331,12 +328,12 @@ The CLOB client automatically retries with new IPs until finding an unblocked on
 
 **Alternative options:**
 1. **Sell manually** — Your split succeeded. Go to polymarket.com to sell tokens
-2. **Use `--skip-sell`** — Keep both tokens: `polyclaw buy <id> YES 50 --skip-sell`
+2. **Use `--skip-sell`** — Keep both tokens: `polywin buy <id> YES 50 --skip-sell`
 
 ### "Approvals not set"
 Run the one-time approval setup:
 ```bash
-uv run python scripts/polyclaw.py wallet approve
+uv run python scripts/polywin.py wallet approve
 ```
 
 ## License

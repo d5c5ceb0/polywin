@@ -1,10 +1,10 @@
 ---
-name: polyclaw
+name: polywin
 description: "Trade on Polymarket via split + CLOB execution. Browse markets, track positions with P&L, discover hedges via LLM. Polygon/Web3."
-metadata: {"openclaw":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYCLAW_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYCLAW_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
+metadata: {"openclaw":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
 ---
 
-# PolyClaw
+# PolyWin
 
 Trading-enabled Polymarket skill for OpenClaw. Browse markets, manage wallets, execute trades, and track positions.
 
@@ -30,22 +30,25 @@ uv sync
 Before your first trade, set Polymarket contract approvals (one-time, costs ~0.01 POL in gas):
 
 ```bash
-uv run python scripts/polyclaw.py wallet approve
+uv run python scripts/polywin.py wallet approve
 ```
 
-This submits 6 approval transactions to Polygon. You only need to do this once per wallet.
+This checks existing approvals and only submits transactions for missing ones. You only need to do this once per wallet.
 
 ### Browse Markets
 
 ```bash
 # Trending markets by volume
-uv run python scripts/polyclaw.py markets trending
+uv run python scripts/polywin.py markets trending
+
+# Newest markets (by creation time)
+uv run python scripts/polywin.py markets new
 
 # Search markets
-uv run python scripts/polyclaw.py markets search "election"
+uv run python scripts/polywin.py markets search "election"
 
 # Market details (returns full JSON with all fields)
-uv run python scripts/polyclaw.py market <market_id>
+uv run python scripts/polywin.py market <market_id>
 ```
 
 **Output options:**
@@ -57,41 +60,54 @@ uv run python scripts/polyclaw.py market <market_id>
 
 ```bash
 # Check wallet status (address, balances)
-uv run python scripts/polyclaw.py wallet status
+uv run python scripts/polywin.py wallet status
+
+# Quick balance check (shortcut)
+uv run python scripts/polywin.py balance
 
 # Set contract approvals (one-time)
-uv run python scripts/polyclaw.py wallet approve
+uv run python scripts/polywin.py wallet approve
 ```
 
-The wallet is configured via the `POLYCLAW_PRIVATE_KEY` environment variable.
+The wallet is configured via the `POLYWIN_PRIVATE_KEY` environment variable.
+
+**Balance output includes:**
+- Wallet address
+- POL balance (for gas)
+- USDC.e balance (for trading)
+- Approval status
 
 ### Trading
 
 ```bash
 # Buy YES position for $50
-uv run python scripts/polyclaw.py buy <market_id> YES 50
+uv run python scripts/polywin.py buy <market_id> YES 50
 
 # Buy NO position for $25
-uv run python scripts/polyclaw.py buy <market_id> NO 25
+uv run python scripts/polywin.py buy <market_id> NO 25
 
 # Sell all YES tokens
-uv run python scripts/polyclaw.py sell <market_id> YES
+uv run python scripts/polywin.py sell <market_id> YES
 
 # Sell specific amount of NO tokens
-uv run python scripts/polyclaw.py sell <market_id> NO --amount 50
+uv run python scripts/polywin.py sell <market_id> NO --amount 50
 ```
 
 **Sell options:**
 - Default sells all tokens of the specified position
 - Use `--amount` to sell a specific number of tokens
-- Automatically marks the position as closed in local storage
 
 ### Positions
 
 ```bash
-# List all positions with P&L
-uv run python scripts/polyclaw.py positions
+# List all positions (fetched from CLOB API)
+uv run python scripts/polywin.py positions
 ```
+
+**Position tracking:**
+- Positions are fetched directly from the CLOB API (on-chain data)
+- Shows current token balances, prices, and estimated value
+- Automatically enriches with market names from Gamma API
 
 ### Hedge Discovery
 
@@ -99,13 +115,13 @@ Find covering portfolios - pairs of market positions that hedge each other via c
 
 ```bash
 # Scan trending markets for hedges
-uv run python scripts/polyclaw.py hedge scan
+uv run python scripts/polywin.py hedge scan
 
 # Scan markets matching a query
-uv run python scripts/polyclaw.py hedge scan --query "election"
+uv run python scripts/polywin.py hedge scan --query "election"
 
 # Analyze specific markets for hedging relationship
-uv run python scripts/polyclaw.py hedge analyze <market_id_1> <market_id_2>
+uv run python scripts/polywin.py hedge analyze <market_id_1> <market_id_2>
 ```
 
 **Output options:**
@@ -134,7 +150,7 @@ For the MVP, the private key is stored in an environment variable for simplicity
 |----------|----------|-------------|
 | `CHAINSTACK_NODE` | No | Polygon RPC URL (default: `https://polygon.drpc.org`) |
 | `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM hedge discovery |
-| `POLYCLAW_PRIVATE_KEY` | Yes (trading) | EVM private key (hex, with or without 0x prefix) |
+| `POLYWIN_PRIVATE_KEY` | Yes (trading) | EVM private key (hex, with or without 0x prefix) |
 | `HTTPS_PROXY` | Recommended | Rotating residential proxy for CLOB (e.g., IPRoyal) |
 | `CLOB_MAX_RETRIES` | No | Max CLOB retries with IP rotation (default: 5) |
 
@@ -194,26 +210,49 @@ If CLOB fails after all retries, your split still succeeded. The output tells yo
 ## Troubleshooting
 
 ### "No wallet available"
-Set the `POLYCLAW_PRIVATE_KEY` environment variable:
+Set the `POLYWIN_PRIVATE_KEY` environment variable:
 ```bash
-export POLYCLAW_PRIVATE_KEY="0x..."
+export POLYWIN_PRIVATE_KEY="0x..."
 ```
 
 ### "Insufficient USDC.e"
-Check balance with `uv run python scripts/polyclaw.py wallet status`. You need USDC.e (bridged USDC) on Polygon.
+Check balance with `uv run python scripts/polywin.py wallet status`. You need USDC.e (bridged USDC) on Polygon.
 
-### "CLOB order failed"
+### "CLOB order failed" / "401 Unauthorized"
 The CLOB sell may fail due to:
 - Insufficient liquidity at the sell price
 - IP blocked by Cloudflare (try proxy)
+- API credentials timing issue (retry usually works)
 
-Your split still succeeded - you have the tokens, just couldn't sell unwanted side.
+Your split still succeeded - you have the tokens, just couldn't sell unwanted side. You can:
+1. Wait a moment and run `sell` command manually
+2. Sell on polymarket.com website
 
 ### "Approvals not set"
 First trade requires contract approvals. Run:
 ```bash
-uv run python scripts/polyclaw.py wallet approve
+uv run python scripts/polywin.py wallet approve
 ```
+
+The command checks existing approvals and only submits transactions for missing ones.
+
+## Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `markets trending` | Show trending markets by volume |
+| `markets new` | Show newest markets by creation time |
+| `markets search <query>` | Search markets by keyword |
+| `markets events` | Show events with multiple markets |
+| `market <id>` | Show market details |
+| `wallet status` | Show wallet address and balances |
+| `wallet approve` | Set contract approvals (one-time) |
+| `balance` | Show wallet balances (shortcut for `wallet status`) |
+| `buy <id> YES/NO <amount>` | Buy position via split + CLOB |
+| `sell <id> YES/NO` | Sell tokens via CLOB |
+| `positions` | List positions from CLOB API |
+| `hedge scan` | Scan for hedging opportunities |
+| `hedge analyze <id1> <id2>` | Analyze pair for hedging |
 
 ## License
 

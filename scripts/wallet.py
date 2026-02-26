@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 from lib.wallet_manager import WalletManager
+from lib.clob_client import ClobClientWrapper
 
 
 def cmd_status(args):
@@ -22,7 +23,7 @@ def cmd_status(args):
 
     if not manager.address:
         print("No wallet configured.")
-        print("Set POLYCLAW_PRIVATE_KEY environment variable.")
+        print("Set POLYWIN_PRIVATE_KEY environment variable.")
         return 1
 
     result = {
@@ -51,7 +52,7 @@ def cmd_approve(args):
 
     if not manager.address:
         print("Error: No wallet configured")
-        print("Set POLYCLAW_PRIVATE_KEY environment variable.")
+        print("Set POLYWIN_PRIVATE_KEY environment variable.")
         return 1
 
     # Check if already approved
@@ -80,12 +81,20 @@ def cmd_approve(args):
         return 1
 
 
+def cmd_balance(args):
+    """Show wallet balances (alias for status)."""
+    return cmd_status(args)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Wallet management")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
     # Status
     subparsers.add_parser("status", help="Show wallet status")
+    
+    # Balance (alias for status)
+    subparsers.add_parser("balance", help="Show wallet balances")
 
     # Approve
     subparsers.add_parser("approve", help="Set Polymarket approvals")
@@ -94,6 +103,8 @@ def main():
 
     if args.command == "status":
         return cmd_status(args)
+    elif args.command == "balance":
+        return cmd_balance(args)
     elif args.command == "approve":
         return cmd_approve(args)
     else:

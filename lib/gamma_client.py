@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -49,15 +50,61 @@ class GammaClient:
     def __init__(self, timeout: float = 30.0):
         self.timeout = timeout
 
-    async def get_trending_markets(self, limit: int = 20) -> list[Market]:
-        """Get trending markets by volume."""
+    async def get_trending_markets(self, limit: int = 20, include_ended: bool = False) -> list[Market]:
+        """Get trending markets by volume.
+        
+        Args:
+            limit: Number of markets to return
+            include_ended: If False, filter out markets past their end_date
+        """
+        # Fetch more to account for filtering
+        fetch_limit = limit * 2 if not include_ended else limit
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            resp = await http.get(
+                f"{GAMMA_API_BASE}/markets",
+                params={
+                    "closed": "false",
+                    "limit": fetch_limit,
+                    "order": "volume24hr",
+                    "ascending": "false",
+                },
+            )
+            resp.raise_for_status()
+            
+            markets = [self._parse_market(m) for m in resp.json()]
+            
+            if not include_ended:
+                now = datetime.now(timezone.utc)
+                filtered = []
+                for m in markets:
+                    if m.end_date:
+                        try:
+                            end_dt = datetime.fromisoformat(m.end_date.replace("Z", "+00:00"))
+                            if end_dt < now:
+                                continue  # Skip ended markets
+                        except (ValueError, TypeError):
+                            pass
+                    filtered.append(m)
+                    if len(filtered) >= limit:
+                        break
+                return filtered
+            
+            return markets[:limit]
+
+    async def get_new_markets(self, limit: int = 20) -> list[Market]:
+        """Get newest markets by creation time.
+        
+        Args:
+            limit: Number of markets to return
+        """
         async with httpx.AsyncClient(timeout=self.timeout) as http:
             resp = await http.get(
                 f"{GAMMA_API_BASE}/markets",
                 params={
                     "closed": "false",
                     "limit": limit,
-                    "order": "volume24hr",
+                    "order": "startDate",
                     "ascending": "false",
                 },
             )

@@ -93,6 +93,24 @@ async def cmd_trending(args):
             print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
 
 
+async def cmd_new(args):
+    """Show newest markets."""
+    client = GammaClient()
+    markets = await client.get_new_markets(limit=args.limit)
+
+    if args.json:
+        # JSON output: full questions for agent consumption
+        print(json.dumps([format_market_row(m) for m in markets], indent=2))
+    else:
+        # Terminal output: truncate unless --full
+        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
+        print("-" * 100)
+        for m in markets:
+            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
+            ends = format_end_date(m.end_date)
+            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
+
+
 async def cmd_search(args):
     """Search markets by keyword."""
     client = GammaClient()
@@ -204,6 +222,11 @@ def main():
     trending_parser.add_argument("--limit", type=int, default=20, help="Number of markets")
     trending_parser.add_argument("--full", action="store_true", help="Show full question text")
 
+    # New
+    new_parser = subparsers.add_parser("new", help="Show newest markets")
+    new_parser.add_argument("--limit", type=int, default=20, help="Number of markets")
+    new_parser.add_argument("--full", action="store_true", help="Show full question text")
+
     # Search
     search_parser = subparsers.add_parser("search", help="Search markets")
     search_parser.add_argument("query", help="Search query")
@@ -223,6 +246,8 @@ def main():
 
     if args.command == "trending":
         return asyncio.run(cmd_trending(args))
+    elif args.command == "new":
+        return asyncio.run(cmd_new(args))
     elif args.command == "search":
         return asyncio.run(cmd_search(args))
     elif args.command == "details":
