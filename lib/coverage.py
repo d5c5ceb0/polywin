@@ -48,6 +48,7 @@ def calculate_coverage_metrics(
     target_price: float,
     cover_probability: float,
     total_cost: float,
+    gas_cost_usd: float | None = None,
 ) -> dict:
     """
     Calculate coverage and expected value for a portfolio.
@@ -56,10 +57,17 @@ def calculate_coverage_metrics(
         target_price: Price of target position (= P(target pays out))
         cover_probability: P(cover fires | target doesn't pay out)
         total_cost: Total cost of both positions
+        gas_cost_usd: Gas cost for hedge entry (defaults to estimate from gas module)
 
     Returns:
-        Dict with coverage, loss_probability, expected_profit
+        Dict with coverage, loss_probability, expected_profit, min_position_size
     """
+    # Import here to avoid circular dependency
+    from lib.gas import ESTIMATED_HEDGE_GAS_USD, calculate_min_position_size
+    
+    if gas_cost_usd is None:
+        gas_cost_usd = ESTIMATED_HEDGE_GAS_USD
+    
     p_target = target_price
     p_not_target = 1 - target_price
 
@@ -70,12 +78,18 @@ def calculate_coverage_metrics(
     loss_probability = p_not_target * (1 - cover_probability)
 
     # Expected payout is just coverage (each payout is $1)
+    # This is profit per $1 of position (before gas)
     expected_profit = coverage - total_cost
+
+    # Minimum position size to be profitable after gas
+    min_position_size = calculate_min_position_size(expected_profit, gas_cost_usd)
 
     return {
         "coverage": round(coverage, 4),
         "loss_probability": round(loss_probability, 4),
         "expected_profit": round(expected_profit, 4),
+        "min_position_size": round(min_position_size, 2) if min_position_size is not None else None,
+        "gas_cost_usd": round(gas_cost_usd, 4),
     }
 
 

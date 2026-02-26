@@ -2,9 +2,15 @@
 """Hedge discovery commands - find covering portfolios via LLM implications.
 
 Usage:
+    hedge events                  # Scan events for hedges (recommended)
+    hedge events --limit 20       # Scan more events
     hedge scan                    # Scan trending markets for hedges
     hedge scan --query "election" # Scan markets matching query
     hedge analyze <id1> <id2>     # Analyze specific market pair
+
+The 'events' command is recommended because markets within the same event
+are more likely to have logical implications (e.g., "City X captured" implies
+"Military operation in region Y" within a war-related event).
 """
 
 import sys
@@ -330,13 +336,22 @@ def build_portfolios_from_covers(
 
 def format_portfolio_row(p: dict) -> str:
     """Format a portfolio as a table row."""
-    target_q = p["target_question"][:35] + "..." if len(p["target_question"]) > 35 else p["target_question"]
-    cover_q = p["cover_question"][:35] + "..." if len(p["cover_question"]) > 35 else p["cover_question"]
+    target_q = p["target_question"][:30] + "..." if len(p["target_question"]) > 30 else p["target_question"]
+    cover_q = p["cover_question"][:30] + "..." if len(p["cover_question"]) > 30 else p["cover_question"]
+
+    # Format min position size
+    min_pos = p.get("min_position_size")
+    if min_pos is None:
+        min_pos_str = "  N/A"
+    elif min_pos >= 1000:
+        min_pos_str = ">$999"
+    else:
+        min_pos_str = f"${min_pos:4.0f}"
 
     return (
         f"T{p['tier']} {p['coverage']*100:5.1f}% "
-        f"${p['total_cost']:.2f} "
-        f"{p['target_position']:>3}@{p['target_price']:.2f} {target_q:<38} | "
+        f"${p['total_cost']:.2f} {min_pos_str} "
+        f"{p['target_position']:>3}@{p['target_price']:.2f} {target_q:<33} | "
         f"{p['cover_position']:>3}@{p['cover_price']:.2f} {cover_q}"
     )
 
@@ -347,11 +362,18 @@ def print_portfolios_table(portfolios: list[dict]) -> None:
         print("No covering portfolios found.")
         return
 
-    print(f"{'Tier':>4} {'Cov':>6} {'Cost':>6} {'Target':^45} | {'Cover'}")
-    print("-" * 120)
+    # Import gas module for cost info
+    from lib.gas import get_gas_summary
+    gas_info = get_gas_summary()
+
+    print(f"{'Tier':>4} {'Cov':>6} {'Cost':>6} {'MinPos':>6} {'Target':^40} | {'Cover'}")
+    print("-" * 125)
 
     for p in portfolios:
         print(format_portfolio_row(p))
+
+    print("-" * 125)
+    print(f"MinPos = Minimum position size to profit after gas (${gas_info['hedge_entry_cost_usd']:.3f} for 2 splits @ {gas_info['gas_price_gwei']} gwei)")
 
 
 def print_portfolios_json(portfolios: list[dict]) -> None:
@@ -421,6 +443,87 @@ async def cmd_scan(args):
 
     # Output
     print(f"\n=== Found {len(all_portfolios)} covering portfolios ===\n", file=sys.stderr)
+
+    if args.json:
+        print_portfolios_json(all_portfolios)
+    else:
+        print_portfolios_table(all_portfolios)
+
+    return 0
+
+
+async def cmd_events(args):
+    """Scan events for hedging opportunities within each event's markets."""
+    gamma = GammaClient()
+
+    # Fetch events
+    print(f"Fetching events...", file=sys.stderr)
+    events = await gamma.get_events(limit=args.limit)
+    
+    # Filter events with multiple markets (hedging requires at least 2)
+    events_with_markets = [e for e in events if len(e.markets) >= 2]
+    print(f"Found {len(events_with_markets)} events with 2+ markets", file=sys.stderr)
+
+    if not events_with_markets:
+        print("No events with multiple markets found")
+        return 1
+
+    # Initialize LLM client
+    try:
+        llm = LLMClient(model=args.model)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+
+    all_portfolios = []
+    events_analyzed = 0
+
+    try:
+        for event in events_with_markets:
+            markets = event.markets
+            
+            # Skip events with too few or too many markets
+            if len(markets) < 2:
+                continue
+            if args.max_markets and len(markets) > args.max_markets:
+                print(f"  Skipping '{event.title[:40]}...' ({len(markets)} markets > {args.max_markets})", file=sys.stderr)
+                continue
+
+            events_analyzed += 1
+            print(f"\n[Event {events_analyzed}] {event.title[:60]}", file=sys.stderr)
+            print(f"  {len(markets)} markets in this event", file=sys.stderr)
+
+            event_portfolios = []
+
+            # Analyze each market against others in the same event
+            for i, target in enumerate(markets):
+                if not args.json:
+                    print(f"  [{i+1}/{len(markets)}] {target.question[:50]}...", file=sys.stderr)
+
+                covers = await extract_implications_for_market(target, markets, llm)
+
+                if covers:
+                    portfolios = build_portfolios_from_covers(target, covers)
+                    event_portfolios.extend(portfolios)
+
+            if event_portfolios:
+                print(f"  => Found {len(event_portfolios)} potential hedges in this event", file=sys.stderr)
+                all_portfolios.extend(event_portfolios)
+
+    finally:
+        await llm.close()
+
+    # Filter and sort
+    if args.min_coverage:
+        all_portfolios = filter_portfolios_by_coverage(all_portfolios, args.min_coverage)
+
+    if args.tier:
+        all_portfolios = filter_portfolios_by_tier(all_portfolios, args.tier)
+
+    all_portfolios = sort_portfolios(all_portfolios)
+
+    # Output
+    print(f"\n=== Analyzed {events_analyzed} events, found {len(all_portfolios)} covering portfolios ===\n", file=sys.stderr)
 
     if args.json:
         print_portfolios_json(all_portfolios)
@@ -513,14 +616,21 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
-    # Scan command
-    scan_parser = subparsers.add_parser("scan", help="Scan markets for hedges")
+    # Scan command - scan trending/searched markets
+    scan_parser = subparsers.add_parser("scan", help="Scan trending markets for hedges")
     scan_parser.add_argument("--query", "-q", help="Search query to filter markets")
     scan_parser.add_argument("--limit", type=int, default=20, help="Number of markets to scan (default: 20)")
     scan_parser.add_argument("--min-coverage", type=float, default=0.85, help="Minimum coverage threshold (default: 0.85)")
     scan_parser.add_argument("--tier", type=int, default=2, help="Maximum tier to include (1=best, default: 2)")
 
-    # Analyze command
+    # Events command - scan within event groups (recommended)
+    events_parser = subparsers.add_parser("events", help="Scan events for hedges (recommended - finds related markets)")
+    events_parser.add_argument("--limit", type=int, default=10, help="Number of events to scan (default: 10)")
+    events_parser.add_argument("--max-markets", type=int, default=15, help="Skip events with more than N markets (default: 15)")
+    events_parser.add_argument("--min-coverage", type=float, default=0.85, help="Minimum coverage threshold (default: 0.85)")
+    events_parser.add_argument("--tier", type=int, default=2, help="Maximum tier to include (1=best, default: 2)")
+
+    # Analyze command - analyze specific market pair
     analyze_parser = subparsers.add_parser("analyze", help="Analyze specific market pair")
     analyze_parser.add_argument("market_id_1", help="First market ID")
     analyze_parser.add_argument("market_id_2", help="Second market ID")
@@ -530,6 +640,8 @@ def main():
 
     if args.command == "scan":
         return asyncio.run(cmd_scan(args))
+    elif args.command == "events":
+        return asyncio.run(cmd_events(args))
     elif args.command == "analyze":
         return asyncio.run(cmd_analyze(args))
     else:
