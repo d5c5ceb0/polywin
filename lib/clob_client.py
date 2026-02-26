@@ -69,6 +69,9 @@ class ClobClientWrapper:
         # Set up API credentials
         self._creds = self._client.create_or_derive_api_creds()
         self._client.set_api_creds(self._creds)
+        
+        # Brief delay to allow API credentials to propagate
+        time.sleep(1)
 
     @property
     def client(self):

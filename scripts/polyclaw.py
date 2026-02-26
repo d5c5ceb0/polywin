@@ -8,6 +8,7 @@ Usage:
     polyclaw wallet status
     polyclaw wallet approve
     polyclaw buy <market_id> YES 50
+    polyclaw sell <market_id> YES
     polyclaw positions
     polyclaw hedge scan
     polyclaw hedge scan --query "election"
@@ -65,6 +66,10 @@ def main():
         # Shortcut: polyclaw buy <id> YES 50 -> trade buy <id> YES 50
         return run_script("trade", ["buy"] + args)
 
+    elif command == "sell":
+        # Shortcut: polyclaw sell <id> YES -> trade sell <id> YES
+        return run_script("trade", ["sell"] + args)
+
     elif command == "positions":
         return run_script("positions", args)
 
@@ -91,6 +96,10 @@ def main():
         print("")
         print("  buy <market_id> YES <amt>  Buy YES position for $amt")
         print("  buy <market_id> NO <amt>   Buy NO position for $amt")
+        print("")
+        print("  sell <market_id> YES       Sell all YES tokens")
+        print("  sell <market_id> NO        Sell all NO tokens")
+        print("  sell <market_id> YES --amount 50  Sell 50 YES tokens")
         print("")
         print("  positions                  List open positions with P&L")
         print("  positions --all            List all positions")

@@ -54,14 +54,26 @@ def cmd_approve(args):
         print("Set POLYCLAW_PRIVATE_KEY environment variable.")
         return 1
 
+    # Check if already approved
+    try:
+        if manager.check_approvals():
+            print("All approvals already set. No action needed.")
+            return 0
+    except Exception as e:
+        print(f"Warning: Could not check existing approvals: {e}")
+        print("Proceeding with approval setup...")
+
     print("Setting contract approvals...")
-    print("This will submit 6 transactions to Polygon.")
+    print("This will submit up to 6 transactions to Polygon.")
 
     try:
         tx_hashes = manager.set_approvals()
-        print("Approvals set successfully!")
-        for i, tx in enumerate(tx_hashes, 1):
-            print(f"  {i}. {tx}")
+        if tx_hashes:
+            print("Approvals set successfully!")
+            for i, tx in enumerate(tx_hashes, 1):
+                print(f"  {i}. {tx}")
+        else:
+            print("All approvals already set. No transactions needed.")
         return 0
     except Exception as e:
         print(f"Error: {e}")

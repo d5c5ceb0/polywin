@@ -5,6 +5,7 @@ import sys
 import json
 import asyncio
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 # Add parent to path for lib imports
@@ -28,6 +29,35 @@ def format_volume(volume: float) -> str:
         return f"${volume:.0f}"
 
 
+def format_end_date(end_date: str) -> str:
+    """Format end date in human-readable form."""
+    if not end_date:
+        return "N/A"
+    try:
+        # Parse ISO format date
+        dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        now = datetime.now(dt.tzinfo)
+        delta = dt - now
+
+        if delta.days < 0:
+            return "Ended"
+        elif delta.days == 0:
+            hours = delta.seconds // 3600
+            if hours == 0:
+                return "<1h"
+            return f"{hours}h"
+        elif delta.days < 7:
+            return f"{delta.days}d"
+        elif delta.days < 30:
+            return f"{delta.days // 7}w"
+        elif delta.days < 365:
+            return f"{delta.days // 30}mo"
+        else:
+            return dt.strftime("%Y-%m")
+    except (ValueError, TypeError):
+        return end_date[:10] if len(end_date) >= 10 else end_date
+
+
 def format_market_row(market, truncate: int = 0) -> dict:
     """Format market for display. Set truncate=0 for full question."""
     question = market.question
@@ -40,6 +70,8 @@ def format_market_row(market, truncate: int = 0) -> dict:
         "no": format_price(market.no_price),
         "volume_24h": format_volume(market.volume_24h),
         "volume_total": format_volume(market.volume),
+        "end_date": market.end_date,
+        "ends_in": format_end_date(market.end_date),
     }
 
 
@@ -53,12 +85,12 @@ async def cmd_trending(args):
         print(json.dumps([format_market_row(m) for m in markets], indent=2))
     else:
         # Terminal output: truncate unless --full
-        trunc = 0 if args.full else 60
-        print(f"{'ID':<12} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Question'}")
-        print("-" * 80)
+        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
+        print("-" * 100)
         for m in markets:
-            question = m.question if args.full else (m.question[:60] + "..." if len(m.question) > 60 else m.question)
-            print(f"{m.id[:12]:<12} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {question}")
+            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
+            ends = format_end_date(m.end_date)
+            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
 
 
 async def cmd_search(args):
@@ -75,11 +107,12 @@ async def cmd_search(args):
         print(json.dumps([format_market_row(m) for m in markets], indent=2))
     else:
         # Terminal output: truncate unless --full
-        print(f"{'ID':<12} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Question'}")
-        print("-" * 80)
+        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
+        print("-" * 100)
         for m in markets:
-            question = m.question if args.full else (m.question[:60] + "..." if len(m.question) > 60 else m.question)
-            print(f"{m.id[:12]:<12} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {question}")
+            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
+            ends = format_end_date(m.end_date)
+            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
 
 
 async def cmd_details(args):

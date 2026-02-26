@@ -20,8 +20,11 @@ class WalletBalances:
 class WalletManager:
     """Manages wallet from POLYCLAW_PRIVATE_KEY env var."""
 
+    # Default public RPC endpoint for Polygon
+    DEFAULT_RPC_URL = "https://polygon.drpc.org"
+
     def __init__(self, rpc_url: Optional[str] = None):
-        self.rpc_url = rpc_url or os.environ.get("CHAINSTACK_NODE", "")
+        self.rpc_url = rpc_url or os.environ.get("CHAINSTACK_NODE", self.DEFAULT_RPC_URL)
         self._private_key: Optional[str] = None
         self._address: Optional[str] = None
         self._load_from_env()
@@ -48,8 +51,6 @@ class WalletManager:
 
     def _get_web3(self) -> Web3:
         """Get Web3 instance."""
-        if not self.rpc_url:
-            raise ValueError("CHAINSTACK_NODE environment variable not set")
         return Web3(Web3.HTTPProvider(self.rpc_url, request_kwargs={"timeout": 60, "proxies": {}}))
 
     def get_unlocked_key(self) -> str:
@@ -114,7 +115,10 @@ class WalletManager:
         return True
 
     def set_approvals(self) -> list[str]:
-        """Set all Polymarket contract approvals. Returns tx hashes."""
+        """Set all Polymarket contract approvals. Returns tx hashes.
+        
+        Only submits transactions for approvals that are not already set.
+        """
         if not self._private_key:
             raise ValueError("No wallet configured")
 
@@ -134,16 +138,31 @@ class WalletManager:
         MAX_UINT256 = 2**256 - 1
         tx_hashes = []
 
+        # Define approvals with check functions
+        # (contract, method, spender, value, check_fn)
         approvals = [
-            (usdc, "approve", CONTRACTS["CTF"], MAX_UINT256),
-            (usdc, "approve", CONTRACTS["CTF_EXCHANGE"], MAX_UINT256),
-            (usdc, "approve", CONTRACTS["NEG_RISK_CTF_EXCHANGE"], MAX_UINT256),
-            (ctf, "setApprovalForAll", CONTRACTS["CTF_EXCHANGE"], True),
-            (ctf, "setApprovalForAll", CONTRACTS["NEG_RISK_CTF_EXCHANGE"], True),
-            (ctf, "setApprovalForAll", CONTRACTS["NEG_RISK_ADAPTER"], True),
+            (usdc, "approve", CONTRACTS["CTF"], MAX_UINT256,
+             lambda: usdc.functions.allowance(address, CONTRACTS["CTF"]).call() > 0),
+            (usdc, "approve", CONTRACTS["CTF_EXCHANGE"], MAX_UINT256,
+             lambda: usdc.functions.allowance(address, CONTRACTS["CTF_EXCHANGE"]).call() > 0),
+            (usdc, "approve", CONTRACTS["NEG_RISK_CTF_EXCHANGE"], MAX_UINT256,
+             lambda: usdc.functions.allowance(address, CONTRACTS["NEG_RISK_CTF_EXCHANGE"]).call() > 0),
+            (ctf, "setApprovalForAll", CONTRACTS["CTF_EXCHANGE"], True,
+             lambda: ctf.functions.isApprovedForAll(address, CONTRACTS["CTF_EXCHANGE"]).call()),
+            (ctf, "setApprovalForAll", CONTRACTS["NEG_RISK_CTF_EXCHANGE"], True,
+             lambda: ctf.functions.isApprovedForAll(address, CONTRACTS["NEG_RISK_CTF_EXCHANGE"]).call()),
+            (ctf, "setApprovalForAll", CONTRACTS["NEG_RISK_ADAPTER"], True,
+             lambda: ctf.functions.isApprovedForAll(address, CONTRACTS["NEG_RISK_ADAPTER"]).call()),
         ]
 
-        for contract, method, spender, value in approvals:
+        for contract, method, spender, value, check_fn in approvals:
+            # Skip if already approved
+            try:
+                if check_fn():
+                    continue
+            except Exception:
+                pass  # If check fails, proceed with approval
+
             fn = getattr(contract.functions, method)
             tx = fn(Web3.to_checksum_address(spender), value).build_transaction(
                 {

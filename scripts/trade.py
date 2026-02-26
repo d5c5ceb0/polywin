@@ -45,6 +45,20 @@ class TradeResult:
     entry_price: float = 0.0
 
 
+@dataclass
+class SellResult:
+    """Result of a sell execution."""
+
+    success: bool
+    market_id: str
+    position: str
+    amount: float
+    price: float
+    clob_order_id: Optional[str]
+    error: Optional[str] = None
+    question: str = ""
+
+
 class TradeExecutor:
     """Executes on-chain trades via split + CLOB sell."""
 
@@ -196,7 +210,7 @@ class TradeExecutor:
                 error=f"Split failed: {e}",
             )
 
-        time.sleep(2)  # Wait for chain confirmation
+        time.sleep(3)  # Wait for chain confirmation and CLOB API readiness
 
         # Sell unwanted side via CLOB
         clob_order_id = None
@@ -236,6 +250,140 @@ class TradeExecutor:
             wanted_token_id=wanted_token,
             entry_price=wanted_price,
         )
+
+    async def sell_position(
+        self,
+        market_id: str,
+        position: str,  # "YES" or "NO"
+        amount: Optional[float] = None,
+    ) -> SellResult:
+        """Sell a position on a market via CLOB."""
+        position = position.upper()
+        if position not in ["YES", "NO"]:
+            return SellResult(
+                success=False,
+                market_id=market_id,
+                position=position,
+                amount=0,
+                price=0,
+                clob_order_id=None,
+                error="Position must be YES or NO",
+            )
+
+        # Check wallet
+        if not self.wallet.is_unlocked:
+            return SellResult(
+                success=False,
+                market_id=market_id,
+                position=position,
+                amount=0,
+                price=0,
+                clob_order_id=None,
+                error="Wallet not unlocked",
+            )
+
+        # Get market info
+        try:
+            market = await self._gamma.get_market(market_id)
+        except Exception as e:
+            return SellResult(
+                success=False,
+                market_id=market_id,
+                position=position,
+                amount=0,
+                price=0,
+                clob_order_id=None,
+                error=f"Failed to fetch market: {e}",
+            )
+
+        # Determine token and price
+        token_id = market.yes_token_id if position == "YES" else market.no_token_id
+        current_price = market.yes_price if position == "YES" else market.no_price
+
+        if not token_id:
+            return SellResult(
+                success=False,
+                market_id=market_id,
+                position=position,
+                amount=0,
+                price=current_price,
+                clob_order_id=None,
+                error=f"No token ID found for {position}",
+            )
+
+        # Get token balance if amount not specified
+        if amount is None:
+            w3 = self._get_web3()
+            ctf = w3.eth.contract(
+                address=Web3.to_checksum_address(CONTRACTS["CTF"]),
+                abi=CTF_ABI,
+            )
+            balance = ctf.functions.balanceOf(
+                Web3.to_checksum_address(self.wallet.address),
+                int(token_id),
+            ).call()
+            amount = balance / 1e6  # Convert from wei
+
+            if amount <= 0:
+                return SellResult(
+                    success=False,
+                    market_id=market_id,
+                    position=position,
+                    amount=0,
+                    price=current_price,
+                    clob_order_id=None,
+                    error=f"No {position} tokens to sell",
+                )
+
+        print(f"Market: {market.question}")
+        print(f"Selling: {amount:.2f} {position} tokens @ ~${current_price:.2f}")
+
+        # Execute sell via CLOB
+        try:
+            clob = ClobClientWrapper(
+                self.wallet.get_unlocked_key(),
+                self.wallet.address,
+            )
+            clob_order_id, clob_filled, clob_error = clob.sell_fok(
+                token_id,
+                amount,
+                current_price,
+            )
+
+            if clob_filled:
+                print(f"CLOB sell filled: {clob_order_id}")
+                return SellResult(
+                    success=True,
+                    market_id=market_id,
+                    position=position,
+                    amount=amount,
+                    price=current_price,
+                    clob_order_id=clob_order_id,
+                    question=market.question,
+                )
+            else:
+                return SellResult(
+                    success=False,
+                    market_id=market_id,
+                    position=position,
+                    amount=amount,
+                    price=current_price,
+                    clob_order_id=clob_order_id,
+                    error=clob_error,
+                    question=market.question,
+                )
+
+        except Exception as e:
+            return SellResult(
+                success=False,
+                market_id=market_id,
+                position=position,
+                amount=amount,
+                price=current_price,
+                clob_order_id=None,
+                error=str(e),
+                question=market.question,
+            )
 
 
 async def cmd_buy(args):
@@ -307,6 +455,55 @@ async def cmd_buy(args):
         wallet.lock()
 
 
+async def cmd_sell(args):
+    """Execute sell command."""
+    wallet = WalletManager()
+
+    if not wallet.is_unlocked:
+        print("Error: No wallet configured")
+        print("Set POLYCLAW_PRIVATE_KEY environment variable.")
+        return 1
+
+    try:
+        executor = TradeExecutor(wallet)
+        result = await executor.sell_position(
+            args.market_id,
+            args.position,
+            amount=args.amount,
+        )
+
+        print("\n" + "=" * 50)
+        if result.success:
+            print("Sell executed successfully!")
+            print(f"  Market: {result.question[:50]}...")
+            print(f"  Position: {result.position}")
+            print(f"  Amount: {result.amount:.2f} tokens")
+            print(f"  Price: ~${result.price:.2f}")
+            print(f"  CLOB Order: {result.clob_order_id}")
+
+            # Update position status if we have a matching position
+            storage = PositionStorage()
+            positions = storage.get_by_market(result.market_id)
+            for pos in positions:
+                if pos["position"] == result.position and pos["status"] == "open":
+                    storage.update_status(pos["position_id"], "closed")
+                    print(f"  Position {pos['position_id'][:12]}... marked as closed")
+                    break
+        else:
+            print(f"Sell failed: {result.error}")
+            return 1
+
+        # Output JSON if requested
+        if args.json:
+            print("\nJSON Result:")
+            print(json.dumps(asdict(result), indent=2))
+
+        return 0
+
+    finally:
+        wallet.lock()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Trade execution")
     parser.add_argument("--json", action="store_true", help="JSON output")
@@ -322,10 +519,21 @@ def main():
         help="Skip selling unwanted side (keep both YES and NO)"
     )
 
+    # Sell
+    sell_parser = subparsers.add_parser("sell", help="Sell a position")
+    sell_parser.add_argument("market_id", help="Market ID")
+    sell_parser.add_argument("position", choices=["YES", "NO", "yes", "no"], help="YES or NO")
+    sell_parser.add_argument(
+        "--amount", type=float, default=None,
+        help="Amount of tokens to sell (default: all)"
+    )
+
     args = parser.parse_args()
 
     if args.command == "buy":
         return asyncio.run(cmd_buy(args))
+    elif args.command == "sell":
+        return asyncio.run(cmd_sell(args))
     else:
         parser.print_help()
         return 1

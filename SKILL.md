@@ -1,7 +1,7 @@
 ---
 name: polyclaw
 description: "Trade on Polymarket via split + CLOB execution. Browse markets, track positions with P&L, discover hedges via LLM. Polygon/Web3."
-metadata: {"openclaw":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["CHAINSTACK_NODE","POLYCLAW_PRIVATE_KEY"]},"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["CHAINSTACK_NODE","POLYCLAW_PRIVATE_KEY"]},"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
+metadata: {"openclaw":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYCLAW_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🦞","homepage":"https://polymarket.com","primaryEnv":"POLYCLAW_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYCLAW_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
 ---
 
 # PolyClaw
@@ -12,7 +12,7 @@ Trading-enabled Polymarket skill for OpenClaw. Browse markets, manage wallets, e
 
 - **Market Browsing** - Search and browse Polymarket prediction markets
 - **Wallet Management** - Env-var based wallet configuration
-- **Trading** - Buy YES/NO positions via split + CLOB execution
+- **Trading** - Buy/Sell YES/NO positions via split + CLOB execution
 - **Position Tracking** - Track entry prices, current prices, and P&L
 - **Hedge Discovery** - LLM-powered covering portfolio discovery via logical implications
 
@@ -73,7 +73,18 @@ uv run python scripts/polyclaw.py buy <market_id> YES 50
 
 # Buy NO position for $25
 uv run python scripts/polyclaw.py buy <market_id> NO 25
+
+# Sell all YES tokens
+uv run python scripts/polyclaw.py sell <market_id> YES
+
+# Sell specific amount of NO tokens
+uv run python scripts/polyclaw.py sell <market_id> NO --amount 50
 ```
+
+**Sell options:**
+- Default sells all tokens of the specified position
+- Use `--amount` to sell a specific number of tokens
+- Automatically marks the position as closed in local storage
 
 ### Positions
 
@@ -121,7 +132,7 @@ For the MVP, the private key is stored in an environment variable for simplicity
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CHAINSTACK_NODE` | Yes (trading) | Polygon RPC URL |
+| `CHAINSTACK_NODE` | No | Polygon RPC URL (default: `https://polygon.drpc.org`) |
 | `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM hedge discovery |
 | `POLYCLAW_PRIVATE_KEY` | Yes (trading) | EVM private key (hex, with or without 0x prefix) |
 | `HTTPS_PROXY` | Recommended | Rotating residential proxy for CLOB (e.g., IPRoyal) |

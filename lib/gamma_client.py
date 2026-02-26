@@ -65,12 +65,30 @@ class GammaClient:
             return [self._parse_market(m) for m in resp.json()]
 
     async def search_markets(self, query: str, limit: int = 20) -> list[Market]:
-        """Search markets by keyword.
+        """Search markets by keyword using Gamma API search endpoint."""
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            # Try server-side search first
+            try:
+                resp = await http.get(
+                    f"{GAMMA_API_BASE}/search",
+                    params={
+                        "query": query,
+                        "limit": limit,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
 
-        Note: Gamma API doesn't support server-side text search,
-        so we fetch a larger batch and filter client-side.
-        """
-        # Fetch more markets to search through
+                # Search endpoint returns markets in a different structure
+                markets_data = data if isinstance(data, list) else data.get("markets", [])
+                return [self._parse_market(m) for m in markets_data[:limit]]
+
+            except (httpx.HTTPStatusError, KeyError) as e:
+                # Fallback to client-side filtering if search endpoint fails
+                return await self._search_markets_fallback(query, limit)
+
+    async def _search_markets_fallback(self, query: str, limit: int = 20) -> list[Market]:
+        """Fallback: client-side filtering when search endpoint unavailable."""
         fetch_limit = max(500, limit * 10)
 
         async with httpx.AsyncClient(timeout=self.timeout) as http:
