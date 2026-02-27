@@ -12,8 +12,11 @@ Browse prediction markets, execute trades on-chain, and discover hedging opportu
 
 ### Market browsing
 - `polywin markets trending` — Top markets by 24h volume
+- `polywin markets new` — Newest markets
 - `polywin markets search "query"` — Search markets by keyword
+- `polywin markets events` — Show events/groups with markets
 - `polywin market <id>` — Market details with prices
+- Pagination: `--page N` for specific page, `--all` to fetch all
 
 ### Trading
 - `polywin buy <market_id> YES <amount>` — Buy YES position
@@ -30,11 +33,15 @@ Browse prediction markets, execute trades on-chain, and discover hedging opportu
 ### Hedge discovery
 - `polywin hedge scan` — Scan trending markets for hedging opportunities
 - `polywin hedge scan --query "topic"` — Scan markets matching a query
+- `polywin hedge events` — Scan events for hedges (recommended)
 - `polywin hedge analyze <id1> <id2>` — Analyze specific market pair
+- Pagination: `--all --limit 100` to scan more markets
 
 Uses LLM-powered contrapositive logic to find covering portfolios. Only logically necessary implications are accepted — correlations and "likely" relationships are rejected.
 
 **Coverage tiers:** T1 (≥95%), T2 (90-95%), T3 (85-90%)
+
+**MinPos:** Minimum position size to profit after gas fees (~$0.01 for 2 splits on Polygon)
 
 ## Quick start
 
@@ -64,20 +71,19 @@ Add the following to your `openclaw.json` under `skills.entries.polywin.env`:
 "polywin": {
   "enabled": true,
   "env": {
-    "CHAINSTACK_NODE": "https://polygon-mainnet.core.chainstack.com/YOUR_KEY",
     "POLYWIN_PRIVATE_KEY": "0x...",
+    "POLYGON_RPC_URL": "https://polygon-mainnet.infura.io/v3/YOUR_KEY",
     "OPENROUTER_API_KEY": "sk-or-v1-..."
   }
 }
 ```
 
 **Where to get the keys:**
-- **Chainstack node** — [Sign up at Chainstack](https://console.chainstack.com) (free tier available, sign up with GitHub, X, or Google)
+- **Polygon RPC URL** — Optional. Use any Polygon RPC provider ([Infura](https://infura.io), [Alchemy](https://alchemy.com), [QuickNode](https://quicknode.com)), or leave empty to use the default public RPC
 - **OpenRouter API key** — [Create key at OpenRouter](https://openrouter.ai/settings/keys)
 
 **Security warning:** Keep only small amounts in this wallet. Withdraw regularly to a secure wallet.
 
-> **Looking for standalone CLI usage?** This skill is designed for OpenClaw. For standalone CLI usage without OpenClaw, see [polymarket-alpha-bot](https://github.com/chainstacklabs/polymarket-alpha-bot).
 
 ### 3. First-time setup (required for trading)
 
@@ -95,9 +101,15 @@ This submits 6 approval transactions to Polygon. You only need to do this once p
 # Browse markets
 uv run python scripts/polywin.py markets trending
 uv run python scripts/polywin.py markets search "election"
+uv run python scripts/polywin.py markets events
+
+# Browse with pagination
+uv run python scripts/polywin.py markets trending --page 1 --limit 50
+uv run python scripts/polywin.py markets trending --all --limit 100
 
 # Find hedging opportunities
-uv run python scripts/polywin.py hedge scan --limit 10
+uv run python scripts/polywin.py hedge events --limit 10
+uv run python scripts/polywin.py hedge scan --all --limit 50
 
 # Check wallet and trade
 uv run python scripts/polywin.py wallet status
@@ -174,9 +186,9 @@ Sells your tokens on the CLOB order book at current market price.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CHAINSTACK_NODE` | Yes (trading) | Polygon RPC URL |
-| `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM |
 | `POLYWIN_PRIVATE_KEY` | Yes (trading) | EVM private key (hex) |
+| `POLYGON_RPC_URL` | No | Polygon RPC URL (default: public RPC) |
+| `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM |
 | `HTTPS_PROXY` | No | Only needed if CLOB orders fail (see [troubleshooting](#clob-order-failed--ip-blocked-by-cloudflare)) |
 | `CLOB_MAX_RETRIES` | No | Max retries for CLOB orders (default: 5) |
 
@@ -201,7 +213,8 @@ polywin/
     ├── clob_client.py           # py-clob-client wrapper
     ├── contracts.py             # CTF ABI + addresses
     ├── coverage.py              # Coverage calculation + tiers
-    ├── gamma_client.py          # Polymarket Gamma API client
+    ├── gamma_client.py          # Polymarket Gamma API client (with pagination)
+    ├── gas.py                   # Gas fee estimation for Polygon
     ├── llm_client.py            # OpenRouter LLM client
     └── wallet_manager.py        # Wallet lifecycle
 ```
@@ -290,10 +303,10 @@ Set the `POLYWIN_PRIVATE_KEY` environment variable:
 export POLYWIN_PRIVATE_KEY="0x..."
 ```
 
-### "CHAINSTACK_NODE not set"
-Set the Polygon RPC URL:
+### "RPC connection failed"
+Set a Polygon RPC URL (optional, uses public RPC by default):
 ```bash
-export CHAINSTACK_NODE="https://polygon-mainnet.core.chainstack.com/YOUR_KEY"
+export POLYGON_RPC_URL="https://polygon-mainnet.infura.io/v3/YOUR_KEY"
 ```
 
 ### "OPENROUTER_API_KEY not set"
@@ -340,10 +353,4 @@ uv run python scripts/polywin.py wallet approve
 
 MIT
 
-## Credits
 
-Based on [polymarket-alpha-bot](https://github.com/chainstacklabs/polymarket-alpha-bot) by Chainstack.
-
-- **Chainstack** — Polygon RPC infrastructure
-- **Polymarket** — Prediction market platform
-- **OpenRouter** — LLM API for hedge discovery

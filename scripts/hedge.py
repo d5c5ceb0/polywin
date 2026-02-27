@@ -4,13 +4,18 @@
 Usage:
     hedge events                  # Scan events for hedges (recommended)
     hedge events --limit 20       # Scan more events
+    hedge events --all --limit 50 # Use pagination to fetch 50 events
     hedge scan                    # Scan trending markets for hedges
     hedge scan --query "election" # Scan markets matching query
+    hedge scan --all --limit 100  # Use pagination to fetch 100 markets
     hedge analyze <id1> <id2>     # Analyze specific market pair
 
 The 'events' command is recommended because markets within the same event
 are more likely to have logical implications (e.g., "City X captured" implies
 "Military operation in region Y" within a war-related event).
+
+Use --all flag to enable pagination for fetching more markets/events beyond
+the default API limit.
 """
 
 import sys
@@ -395,6 +400,13 @@ async def cmd_scan(args):
     if args.query:
         markets = await gamma.search_markets(args.query, limit=args.limit)
         print(f"Found {len(markets)} markets matching '{args.query}'", file=sys.stderr)
+    elif args.all:
+        # Use pagination to fetch more markets
+        markets = await gamma.get_all_markets(
+            max_markets=args.limit,
+            progress=not args.json,
+        )
+        print(f"Got {len(markets)} markets (paginated)", file=sys.stderr)
     else:
         markets = await gamma.get_trending_markets(limit=args.limit)
         print(f"Got {len(markets)} trending markets", file=sys.stderr)
@@ -458,7 +470,14 @@ async def cmd_events(args):
 
     # Fetch events
     print(f"Fetching events...", file=sys.stderr)
-    events = await gamma.get_events(limit=args.limit)
+    if args.all:
+        # Use pagination to fetch more events
+        events = await gamma.get_all_events(
+            max_events=args.limit,
+            progress=not args.json,
+        )
+    else:
+        events = await gamma.get_events(limit=args.limit)
     
     # Filter events with multiple markets (hedging requires at least 2)
     events_with_markets = [e for e in events if len(e.markets) >= 2]
@@ -620,12 +639,14 @@ def main():
     scan_parser = subparsers.add_parser("scan", help="Scan trending markets for hedges")
     scan_parser.add_argument("--query", "-q", help="Search query to filter markets")
     scan_parser.add_argument("--limit", type=int, default=20, help="Number of markets to scan (default: 20)")
+    scan_parser.add_argument("--all", "-a", action="store_true", help="Use pagination to fetch more markets (slower)")
     scan_parser.add_argument("--min-coverage", type=float, default=0.85, help="Minimum coverage threshold (default: 0.85)")
     scan_parser.add_argument("--tier", type=int, default=2, help="Maximum tier to include (1=best, default: 2)")
 
     # Events command - scan within event groups (recommended)
     events_parser = subparsers.add_parser("events", help="Scan events for hedges (recommended - finds related markets)")
     events_parser.add_argument("--limit", type=int, default=10, help="Number of events to scan (default: 10)")
+    events_parser.add_argument("--all", "-a", action="store_true", help="Use pagination to fetch more events (slower)")
     events_parser.add_argument("--max-markets", type=int, default=15, help="Skip events with more than N markets (default: 15)")
     events_parser.add_argument("--min-coverage", type=float, default=0.85, help="Minimum coverage threshold (default: 0.85)")
     events_parser.add_argument("--tier", type=int, default=2, help="Maximum tier to include (1=best, default: 2)")

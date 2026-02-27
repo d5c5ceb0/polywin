@@ -24,7 +24,7 @@ class WalletManager:
     DEFAULT_RPC_URL = "https://polygon.drpc.org"
 
     def __init__(self, rpc_url: Optional[str] = None):
-        self.rpc_url = rpc_url or os.environ.get("CHAINSTACK_NODE", self.DEFAULT_RPC_URL)
+        self.rpc_url = rpc_url or os.environ.get("POLYGON_RPC_URL", self.DEFAULT_RPC_URL)
         self._private_key: Optional[str] = None
         self._address: Optional[str] = None
         self._load_from_env()

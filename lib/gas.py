@@ -25,7 +25,9 @@ DEFAULT_GAS_PRICE_GWEI = 50
 DEFAULT_POL_PRICE_USD = 0.40
 
 # Polygon RPC endpoint for gas price queries
-POLYGON_RPC_URL = os.getenv("POLYGON_RPC_URL", "https://polygon-rpc.com")
+# Uses same default as wallet_manager.py
+DEFAULT_POLYGON_RPC_URL = "https://polygon.drpc.org"
+POLYGON_RPC_URL = os.getenv("POLYGON_RPC_URL", DEFAULT_POLYGON_RPC_URL)
 
 # Cache for gas price (to avoid too many RPC calls)
 _gas_price_cache: dict = {"price_gwei": None, "timestamp": 0}

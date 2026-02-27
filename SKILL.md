@@ -1,12 +1,42 @@
 ---
 name: polywin
-description: "Trade on Polymarket via split + CLOB execution. Browse markets, track positions with P&L, discover hedges via LLM. Polygon/Web3."
-metadata: {"openclaw":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["CHAINSTACK_NODE","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
+description: "Polymarket prediction market trading tool. Use when user wants to: browse/search prediction markets, check market prices/odds, buy or sell YES/NO positions, check wallet balance, view trading positions, or find hedging opportunities between markets."
+capabilities:
+  - Browse and search Polymarket prediction markets by keyword, trending, or newest
+  - Get market details including current YES/NO prices and trading volume
+  - Buy YES or NO positions on any prediction market
+  - Sell existing positions
+  - Check wallet balance (USDC.e and POL)
+  - View current trading positions with P&L
+  - Discover hedging opportunities between related markets using LLM analysis
+triggers:
+  - "What are the odds on [topic]?"
+  - "Show me prediction markets about [topic]"
+  - "Buy YES/NO on [market]"
+  - "What's my Polymarket balance?"
+  - "Show my positions"
+  - "Find hedges for [market]"
+  - "What are trending prediction markets?"
+metadata: {"openclaw":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["POLYGON_RPC_URL","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]},"clawdbot":{"emoji":"🏆","homepage":"https://polymarket.com","primaryEnv":"POLYWIN_PRIVATE_KEY","requires":{"bins":["uv"],"env":["POLYWIN_PRIVATE_KEY"]},"optionalEnv":["POLYGON_RPC_URL","OPENROUTER_API_KEY","HTTPS_PROXY"],"install":[{"id":"uv-brew","kind":"brew","formula":"uv","bins":["uv"],"label":"Install uv (brew)"}]}}
 ---
 
 # PolyWin
 
 Trading-enabled Polymarket skill for OpenClaw. Browse markets, manage wallets, execute trades, and track positions.
+
+## When to Use This Skill
+
+Use this skill when the user wants to:
+- **Check prediction market odds** - "What are the odds Trump wins?", "Show me election markets"
+- **Browse markets** - "What's trending on Polymarket?", "Show me new prediction markets"
+- **Trade** - "Buy $50 YES on [market]", "Sell my NO position"
+- **Check wallet/positions** - "What's my balance?", "Show my positions"
+- **Find hedges** - "Find hedging opportunities", "What markets hedge each other?"
+
+Do NOT use this skill for:
+- General questions about prediction markets (use web search)
+- Questions about Polymarket the company (use web search)
+- Crypto price queries unrelated to prediction markets
 
 ## Features
 
@@ -49,12 +79,32 @@ uv run python scripts/polywin.py markets search "election"
 
 # Market details (returns full JSON with all fields)
 uv run python scripts/polywin.py market <market_id>
+
+# Show events/groups
+uv run python scripts/polywin.py markets events
+
+# Pagination: get specific page (0-indexed)
+uv run python scripts/polywin.py markets trending --page 0 --limit 50
+uv run python scripts/polywin.py markets new --page 1 --limit 50
+uv run python scripts/polywin.py markets events --page 0 --limit 20
+
+# Pagination: fetch all markets/events
+uv run python scripts/polywin.py markets trending --all --limit 200
+uv run python scripts/polywin.py markets new --all --limit 100
+uv run python scripts/polywin.py markets events --all --limit 50
 ```
 
 **Output options:**
 - Default output is a formatted table (good for display)
 - Use `--full` flag for full question text without truncation
 - Use `--json` flag via `scripts/markets.py --json trending` for structured JSON output
+
+**Pagination options** (for `trending`, `new`, `events`):
+- `--page N` — Get specific page (0-indexed), e.g. `--page 0` for first page
+- `--limit N` — Number of items per page (default: 20)
+- `--all` — Fetch all items using automatic pagination
+
+Note: `search` command does not support pagination (API limitation).
 
 ### Wallet Management
 
@@ -120,15 +170,24 @@ uv run python scripts/polywin.py hedge scan
 # Scan markets matching a query
 uv run python scripts/polywin.py hedge scan --query "election"
 
+# Scan events for hedges (recommended - finds related markets)
+uv run python scripts/polywin.py hedge events
+
+# Use pagination to scan more markets/events
+uv run python scripts/polywin.py hedge scan --all --limit 100
+uv run python scripts/polywin.py hedge events --all --limit 50
+
 # Analyze specific markets for hedging relationship
 uv run python scripts/polywin.py hedge analyze <market_id_1> <market_id_2>
 ```
 
 **Output options:**
-- Default output is a formatted table showing Tier, Coverage, Cost, Target, and Cover
+- Default output is a formatted table showing Tier, Coverage, Cost, MinPos, Target, and Cover
+- MinPos = Minimum position size to profit after gas fees
 - Use `--json` flag for structured JSON output
 - Use `--min-coverage 0.90` to filter by minimum coverage (default 0.85)
 - Use `--tier 1` to filter by tier (1=best, default 2)
+- Use `--all` to enable pagination for fetching more markets/events
 
 **Coverage tiers:**
 - **Tier 1 (HIGH):** >=95% coverage - near-arbitrage opportunities
@@ -148,9 +207,9 @@ For the MVP, the private key is stored in an environment variable for simplicity
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CHAINSTACK_NODE` | No | Polygon RPC URL (default: `https://polygon.drpc.org`) |
-| `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM hedge discovery |
 | `POLYWIN_PRIVATE_KEY` | Yes (trading) | EVM private key (hex, with or without 0x prefix) |
+| `POLYGON_RPC_URL` | No | Polygon RPC URL (default: `https://polygon.drpc.org`) |
+| `OPENROUTER_API_KEY` | Yes (hedge) | OpenRouter API key for LLM hedge discovery |
 | `HTTPS_PROXY` | Recommended | Rotating residential proxy for CLOB (e.g., IPRoyal) |
 | `CLOB_MAX_RETRIES` | No | Max CLOB retries with IP rotation (default: 5) |
 

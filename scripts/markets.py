@@ -75,40 +75,75 @@ def format_market_row(market, truncate: int = 0) -> dict:
     }
 
 
+def print_markets_table(markets, full: bool = False):
+    """Print markets in table format."""
+    print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
+    print("-" * 100)
+    for m in markets:
+        question = m.question if full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
+        ends = format_end_date(m.end_date)
+        print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
+
+
 async def cmd_trending(args):
     """Show trending markets."""
     client = GammaClient()
-    markets = await client.get_trending_markets(limit=args.limit)
+    
+    if args.page is not None:
+        # Paginated mode
+        offset = args.page * args.limit
+        markets = await client.get_markets_paginated(
+            limit=args.limit,
+            offset=offset,
+            order="volume24hr",
+        )
+        if not args.json:
+            print(f"Page {args.page} (offset {offset}, limit {args.limit})", file=sys.stderr)
+    elif args.all:
+        # Fetch all with pagination
+        markets = await client.get_all_markets(
+            max_markets=args.limit,
+            progress=not args.json,
+        )
+    else:
+        markets = await client.get_trending_markets(limit=args.limit)
 
     if args.json:
         # JSON output: full questions for agent consumption
         print(json.dumps([format_market_row(m) for m in markets], indent=2))
     else:
-        # Terminal output: truncate unless --full
-        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
-        print("-" * 100)
-        for m in markets:
-            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
-            ends = format_end_date(m.end_date)
-            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
+        print_markets_table(markets, args.full)
 
 
 async def cmd_new(args):
     """Show newest markets."""
     client = GammaClient()
-    markets = await client.get_new_markets(limit=args.limit)
+    
+    if args.page is not None:
+        # Paginated mode
+        offset = args.page * args.limit
+        markets = await client.get_markets_paginated(
+            limit=args.limit,
+            offset=offset,
+            order="startDate",
+        )
+        if not args.json:
+            print(f"Page {args.page} (offset {offset}, limit {args.limit})", file=sys.stderr)
+    elif args.all:
+        # Fetch all with pagination
+        markets = await client.get_all_markets(
+            max_markets=args.limit,
+            order="startDate",
+            progress=not args.json,
+        )
+    else:
+        markets = await client.get_new_markets(limit=args.limit)
 
     if args.json:
         # JSON output: full questions for agent consumption
         print(json.dumps([format_market_row(m) for m in markets], indent=2))
     else:
-        # Terminal output: truncate unless --full
-        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
-        print("-" * 100)
-        for m in markets:
-            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
-            ends = format_end_date(m.end_date)
-            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
+        print_markets_table(markets, args.full)
 
 
 async def cmd_search(args):
@@ -124,13 +159,7 @@ async def cmd_search(args):
         # JSON output: full questions for agent consumption
         print(json.dumps([format_market_row(m) for m in markets], indent=2))
     else:
-        # Terminal output: truncate unless --full
-        print(f"{'ID':<12} {'Question':<52} {'YES':>6} {'NO':>6} {'24h Vol':>10} {'Ends':>6}")
-        print("-" * 100)
-        for m in markets:
-            question = m.question if args.full else (m.question[:50] + "..." if len(m.question) > 50 else m.question)
-            ends = format_end_date(m.end_date)
-            print(f"{m.id[:12]:<12} {question:<52} {format_price(m.yes_price):>6} {format_price(m.no_price):>6} {format_volume(m.volume_24h):>10} {ends:>6}")
+        print_markets_table(markets, args.full)
 
 
 async def cmd_details(args):
@@ -189,7 +218,25 @@ async def cmd_details(args):
 async def cmd_events(args):
     """Show events/groups with markets."""
     client = GammaClient()
-    events = await client.get_events(limit=args.limit)
+    
+    if args.page is not None:
+        # Paginated mode
+        offset = args.page * args.limit
+        events = await client.get_events_paginated(
+            limit=args.limit,
+            offset=offset,
+            order="volume24hr",
+        )
+        if not args.json:
+            print(f"Page {args.page} (offset {offset}, limit {args.limit})", file=sys.stderr)
+    elif args.all:
+        # Fetch all with pagination
+        events = await client.get_all_events(
+            max_events=args.limit,
+            progress=not args.json,
+        )
+    else:
+        events = await client.get_events(limit=args.limit)
 
     if args.json:
         # JSON output: full questions for agent consumption
@@ -220,11 +267,15 @@ def main():
     # Trending
     trending_parser = subparsers.add_parser("trending", help="Show trending markets")
     trending_parser.add_argument("--limit", type=int, default=20, help="Number of markets")
+    trending_parser.add_argument("--page", type=int, default=None, help="Page number (0-indexed) for pagination")
+    trending_parser.add_argument("--all", "-a", action="store_true", help="Fetch all markets using pagination")
     trending_parser.add_argument("--full", action="store_true", help="Show full question text")
 
     # New
     new_parser = subparsers.add_parser("new", help="Show newest markets")
     new_parser.add_argument("--limit", type=int, default=20, help="Number of markets")
+    new_parser.add_argument("--page", type=int, default=None, help="Page number (0-indexed) for pagination")
+    new_parser.add_argument("--all", "-a", action="store_true", help="Fetch all markets using pagination")
     new_parser.add_argument("--full", action="store_true", help="Show full question text")
 
     # Search
@@ -240,6 +291,8 @@ def main():
     # Events
     events_parser = subparsers.add_parser("events", help="Show events/groups")
     events_parser.add_argument("--limit", type=int, default=10, help="Number of events")
+    events_parser.add_argument("--page", type=int, default=None, help="Page number (0-indexed) for pagination")
+    events_parser.add_argument("--all", "-a", action="store_true", help="Fetch all events using pagination")
     events_parser.add_argument("--full", action="store_true", help="Show full question text")
 
     args = parser.parse_args()

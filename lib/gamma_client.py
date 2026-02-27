@@ -1,14 +1,18 @@
 """Polymarket Gamma API client for market browsing."""
 
 import json
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 import httpx
 
 
 GAMMA_API_BASE = "https://gamma-api.polymarket.com"
+
+# Default page size for pagination
+DEFAULT_PAGE_SIZE = 100
 
 
 @dataclass
@@ -49,6 +53,258 @@ class GammaClient:
 
     def __init__(self, timeout: float = 30.0):
         self.timeout = timeout
+
+    # =========================================================================
+    # PAGINATED METHODS
+    # =========================================================================
+
+    async def get_markets_paginated(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        order: str = "volume24hr",
+        ascending: bool = False,
+        closed: bool = False,
+    ) -> list[Market]:
+        """
+        Get markets with pagination support.
+        
+        Args:
+            limit: Number of markets to return (max per page)
+            offset: Number of markets to skip (for pagination)
+            order: Sort field (volume24hr, startDate, endDate, liquidity)
+            ascending: Sort direction
+            closed: Include closed markets
+        
+        Returns:
+            List of markets for this page
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            resp = await http.get(
+                f"{GAMMA_API_BASE}/markets",
+                params={
+                    "closed": str(closed).lower(),
+                    "limit": limit,
+                    "offset": offset,
+                    "order": order,
+                    "ascending": str(ascending).lower(),
+                },
+            )
+            resp.raise_for_status()
+            return [self._parse_market(m) for m in resp.json()]
+
+    async def get_all_markets(
+        self,
+        max_markets: int = 500,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        order: str = "volume24hr",
+        include_ended: bool = False,
+        progress: bool = False,
+    ) -> list[Market]:
+        """
+        Get all active markets using pagination.
+        
+        Args:
+            max_markets: Maximum number of markets to fetch
+            page_size: Number of markets per API request
+            order: Sort field (volume24hr, startDate, endDate, liquidity)
+            include_ended: If False, filter out markets past their end_date
+            progress: If True, print progress to stderr
+        
+        Returns:
+            List of all fetched markets
+        """
+        all_markets = []
+        offset = 0
+        now = datetime.now(timezone.utc)
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            while len(all_markets) < max_markets:
+                if progress:
+                    print(f"  Fetching markets {offset}-{offset + page_size}...", file=sys.stderr)
+                
+                resp = await http.get(
+                    f"{GAMMA_API_BASE}/markets",
+                    params={
+                        "closed": "false",
+                        "limit": page_size,
+                        "offset": offset,
+                        "order": order,
+                        "ascending": "false",
+                    },
+                )
+                resp.raise_for_status()
+                
+                batch = resp.json()
+                if not batch:
+                    break  # No more data
+                
+                for m in batch:
+                    market = self._parse_market(m)
+                    
+                    # Filter ended markets if requested
+                    if not include_ended and market.end_date:
+                        try:
+                            end_dt = datetime.fromisoformat(market.end_date.replace("Z", "+00:00"))
+                            if end_dt < now:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    all_markets.append(market)
+                    if len(all_markets) >= max_markets:
+                        break
+                
+                offset += page_size
+                
+                # If we got fewer results than page_size, we've reached the end
+                if len(batch) < page_size:
+                    break
+        
+        if progress:
+            print(f"  Fetched {len(all_markets)} markets total", file=sys.stderr)
+        
+        return all_markets
+
+    async def iter_markets(
+        self,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        order: str = "volume24hr",
+    ) -> AsyncIterator[Market]:
+        """
+        Iterate over all markets using pagination (async generator).
+        
+        Args:
+            page_size: Number of markets per API request
+            order: Sort field
+        
+        Yields:
+            Market objects one at a time
+        """
+        offset = 0
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            while True:
+                resp = await http.get(
+                    f"{GAMMA_API_BASE}/markets",
+                    params={
+                        "closed": "false",
+                        "limit": page_size,
+                        "offset": offset,
+                        "order": order,
+                        "ascending": "false",
+                    },
+                )
+                resp.raise_for_status()
+                
+                batch = resp.json()
+                if not batch:
+                    break
+                
+                for m in batch:
+                    yield self._parse_market(m)
+                
+                offset += page_size
+                
+                if len(batch) < page_size:
+                    break
+
+    async def get_events_paginated(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        order: str = "volume24hr",
+        ascending: bool = False,
+        closed: bool = False,
+    ) -> list[MarketGroup]:
+        """
+        Get events with pagination support.
+        
+        Args:
+            limit: Number of events to return
+            offset: Number of events to skip
+            order: Sort field
+            ascending: Sort direction
+            closed: Include closed events
+        
+        Returns:
+            List of events for this page
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            resp = await http.get(
+                f"{GAMMA_API_BASE}/events",
+                params={
+                    "closed": str(closed).lower(),
+                    "limit": limit,
+                    "offset": offset,
+                    "order": order,
+                    "ascending": str(ascending).lower(),
+                },
+            )
+            resp.raise_for_status()
+            return [self._parse_event(e) for e in resp.json()]
+
+    async def get_all_events(
+        self,
+        max_events: int = 100,
+        page_size: int = 50,
+        order: str = "volume24hr",
+        progress: bool = False,
+    ) -> list[MarketGroup]:
+        """
+        Get all active events using pagination.
+        
+        Args:
+            max_events: Maximum number of events to fetch
+            page_size: Number of events per API request
+            order: Sort field
+            progress: If True, print progress to stderr
+        
+        Returns:
+            List of all fetched events
+        """
+        all_events = []
+        offset = 0
+        
+        async with httpx.AsyncClient(timeout=self.timeout) as http:
+            while len(all_events) < max_events:
+                if progress:
+                    print(f"  Fetching events {offset}-{offset + page_size}...", file=sys.stderr)
+                
+                resp = await http.get(
+                    f"{GAMMA_API_BASE}/events",
+                    params={
+                        "closed": "false",
+                        "limit": page_size,
+                        "offset": offset,
+                        "order": order,
+                        "ascending": "false",
+                    },
+                )
+                resp.raise_for_status()
+                
+                batch = resp.json()
+                if not batch:
+                    break
+                
+                for e in batch:
+                    all_events.append(self._parse_event(e))
+                    if len(all_events) >= max_events:
+                        break
+                
+                offset += page_size
+                
+                if len(batch) < page_size:
+                    break
+        
+        if progress:
+            print(f"  Fetched {len(all_events)} events total", file=sys.stderr)
+        
+        return all_events
+
+    # =========================================================================
+    # CONVENIENCE METHODS (non-paginated, for backward compatibility)
+    # =========================================================================
 
     async def get_trending_markets(self, limit: int = 20, include_ended: bool = False) -> list[Market]:
         """Get trending markets by volume.
