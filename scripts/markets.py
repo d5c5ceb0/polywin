@@ -209,7 +209,7 @@ async def cmd_details(args):
             "outcome": market.outcome,
         },
         "end_date": market.end_date,
-        "url": f"https://polymarket.com/event/{market.slug}",
+        "url": f"https://polymarket.com/market/{market.slug}",
     }
 
     print(json.dumps(result, indent=2))

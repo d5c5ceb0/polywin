@@ -207,7 +207,7 @@ class TradeExecutor:
                 error=f"Split failed: {e}",
             )
 
-        time.sleep(3)  # Wait for chain confirmation and CLOB API readiness
+        time.sleep(5)  # Wait for chain confirmation and CLOB API readiness
 
         # Sell unwanted side via CLOB
         clob_order_id = None
